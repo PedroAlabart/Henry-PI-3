@@ -1,0 +1,113 @@
+Description: 3er PI
+
+Parameters:
+  NombreBucket:
+    Type: String
+    Description: Parametro para definir el nombre base de los buckets
+    Default: pi3-bucket
+
+Resources:
+
+  # -----------------------
+  # Buckets por capa
+  # -----------------------
+  rBronzeS3bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join [ "-", [ bronze, !Ref NombreBucket, !Ref AWS::AccountId ] ]
+      VersioningConfiguration:
+        Status: Enabled
+
+  rSilverS3bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join [ "-", [ silver, !Ref NombreBucket, !Ref AWS::AccountId ] ]
+      VersioningConfiguration:
+        Status: Enabled
+
+  rGoldS3bucket:
+    Type: AWS::S3::Bucket   
+    Properties:
+      BucketName: !Join [ "-", [ gold, !Ref NombreBucket, !Ref AWS::AccountId ] ]
+      VersioningConfiguration:
+        Status: Enabled
+
+
+  # -----------------------
+  # IAM Role para Glue
+  # -----------------------
+  GlueIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSGlue3erPI
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - glue.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AWSGlue3erPIServicePolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # Permisos Glue y S3 básicos
+              - Effect: Allow
+                Action:
+                  - glue:*
+                  - s3:ListBucket
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  
+                Resource:
+                  - !GetAtt rBronzeS3bucket.Arn
+                  - !Sub "${rBronzeS3bucket.Arn}/*"
+                  - !GetAtt rSilverS3bucket.Arn
+                  - !Sub "${rSilverS3bucket.Arn}/*"
+                  - !GetAtt rGoldS3bucket.Arn
+                  - !Sub "${rGoldS3bucket.Arn}/*"
+                  - arn:aws:s3:::source-bucket-2025-08-25-henry
+                  - arn:aws:s3:::aws-glue-*
+                  - arn:aws:s3:::aws-glue-*/**
+                  - arn:aws:s3:::aws-glue-studio-*
+                  - arn:aws:s3:::aws-glue-studio-*/**
+                  # Glue Catalog
+                  - arn:aws:glue:us-east-1:530923036953:catalog
+                  # Databases
+                  - arn:aws:glue:us-east-1:530923036953:database/*
+                  # Tables (todas las de todas las bases)
+                  - arn:aws:glue:us-east-1:530923036953:table/*
+                  - arn:aws:glue:us-east-1:530923036953:table/*/*
+              # Logs en CloudWatch
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:/aws-glue/*
+        - PolicyName: AWSGlue3erPICatalogPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - glue:GetDatabase
+                  - glue:GetDatabases
+                  - glue:CreateTable
+                  - glue:GetTable
+                  - glue:GetTables
+                Resource: 
+                  - arn:aws:glue:*:*:catalog
+                  - arn:aws:glue:*:*:database/*
+                  - arn:aws:glue:*:*:table/*/*
+
+
+
+
+Outputs:
+  GlueRoleArn:
+    Description: ARN del rol de Glue
+    Value: !GetAtt GlueIAMRole.Arn
